@@ -7,8 +7,6 @@
     </ion-navbar>
 </ion-header>
 
-<ion-content no-padding>
-    <!--<div ion-fixed>-->
+<ion-content no-padding (ionScroll)="windowScrolled($event)">
         <the-grid></the-grid>
-    <!--</div>-->
 </ion-content>

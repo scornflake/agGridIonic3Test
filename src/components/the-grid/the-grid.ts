@@ -1,4 +1,4 @@
-import {ChangeDetectionStrategy, Component} from '@angular/core';
+import {ChangeDetectionStrategy, Component, NgZone} from '@angular/core';
 import * as faker from 'faker';
 
 @Component({
@@ -10,8 +10,10 @@ export class TheGridComponent {
 
     rows: any;
 
-    constructor() {
+    constructor(public zone: NgZone) {
     }
+
+    agHeader: HTMLElement;
 
     get allRolesInLayoutAndDisplayOrder() {
         return [
@@ -33,6 +35,19 @@ export class TheGridComponent {
 
     ngOnInit() {
         this.rows = this.createRows();
+    }
+
+    ngAfterViewInit() {
+        this.agHeader = document.querySelector('.ag-header');
+        console.log(`Our header is: ${this.agHeader}`);
+    }
+
+    windowScrolled(event) {
+
+        if (this.agHeader) {
+            this.agHeader.style.top = `${event.scrollTop - 1}px`;
+            this.agHeader.style.position = 'absolute';
+        }
     }
 
     createRows() {
