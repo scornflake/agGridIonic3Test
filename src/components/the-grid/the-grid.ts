@@ -1,5 +1,9 @@
 import {ChangeDetectionStrategy, Component, NgZone} from '@angular/core';
 import * as faker from 'faker';
+import {Observable, Subject} from "rxjs";
+import {Platform, ScrollEvent} from "ionic-angular";
+import {debounce} from "rxjs/operators";
+import {timer} from "rxjs/observable/timer";
 
 @Component({
     selector: 'the-grid',
@@ -10,10 +14,11 @@ export class TheGridComponent {
 
     rows: any;
 
-    constructor(public zone: NgZone) {
+    constructor(public zone: NgZone, public platform: Platform) {
     }
 
     agHeader: HTMLElement;
+    scrollSubject = new Subject<ScrollEvent>();
 
     get allRolesInLayoutAndDisplayOrder() {
         return [
@@ -37,17 +42,41 @@ export class TheGridComponent {
         this.rows = this.createRows();
     }
 
+    async isDevice(): Promise<boolean> {
+        return this.platform.ready().then(() => {
+            let isADevice = this.platform.is('cordova');
+            console.warn(`isDevice() - on device?:${isADevice}`);
+            return isADevice;
+        });
+    }
+
     ngAfterViewInit() {
         this.agHeader = document.querySelector('.ag-header');
         console.log(`Our header is: ${this.agHeader}`);
+
+        // It's janky under iOS. This helps, but scrolling back up looks pretty awful (you see the header mid-table)
+        this.isDevice().then(isDevice => {
+            console.warn(`Setup scroll subject listener. On device? ${isDevice}`);
+            let theSubject = this.scrollSubject as Observable<ScrollEvent>;
+            if (isDevice) {
+                // try to de-jank
+                theSubject = this.scrollSubject.pipe(debounce(() => timer(10)));
+            }
+            theSubject.subscribe((event) => {
+                this.adjustHeader(event.scrollTop);
+            });
+        })
+    }
+
+    adjustHeader(position: number) {
+        if (this.agHeader) {
+            this.agHeader.style.top = `${position - 1}px`;
+            this.agHeader.style.position = 'absolute';
+        }
     }
 
     windowScrolled(event) {
-
-        if (this.agHeader) {
-            this.agHeader.style.top = `${event.scrollTop - 1}px`;
-            this.agHeader.style.position = 'absolute';
-        }
+        this.scrollSubject.next(event);
     }
 
     createRows() {

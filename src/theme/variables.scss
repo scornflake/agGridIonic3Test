@@ -88,3 +88,7 @@ $colors: (
 @import "noto-sans";
 @import "ag-grid";
 @import "ag-theme-balham";
+
+.ag-header {
+  z-index: 100;
+}
