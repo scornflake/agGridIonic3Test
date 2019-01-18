@@ -22,6 +22,7 @@ export class TheGridComponent {
 
     private _textSizingDiv: HTMLElement;
     private _textWidths: Map<string, number>;
+    private _textWidthReasons: Map<string, string>;
 
     constructor(public zone: NgZone, public platform: Platform) {
     }
@@ -78,6 +79,7 @@ export class TheGridComponent {
 
     determineTextWidths() {
         this._textWidths = new Map<string, number>();
+        this._textWidthReasons = new Map<string, string>();
         let columnNames = Object.getOwnPropertyNames(this.rows[0]);
         for (let columnName of columnNames) {
             let maxWidth = 0;
@@ -85,19 +87,19 @@ export class TheGridComponent {
                 let value = row[columnName];
                 if (Array.isArray(value)) {
                     for (let val of value) {
-                        maxWidth = this.maxOfExistingAndText(maxWidth, val);
+                        maxWidth = this.maxOfExistingAndText(columnName, maxWidth, val);
                     }
                 } else if (columnName == 'date') {
-                    maxWidth = this.maxOfExistingAndText(maxWidth, this.formatAsPlanDate(new Date()));
+                    maxWidth = this.maxOfExistingAndText(columnName, maxWidth, this.formatAsPlanDate(new Date()));
                 } else {
-                    maxWidth = this.maxOfExistingAndText(maxWidth, value);
+                    maxWidth = this.maxOfExistingAndText(columnName, maxWidth, value);
                 }
             }
             this._textWidths[columnName] = maxWidth;
         }
-        // for (let columnName of Object.getOwnPropertyNames(this._textWidths)) {
-        //     console.log(`${columnName} width is ${this._textWidths[columnName]}`);
-        // }
+        for (let columnName of Object.getOwnPropertyNames(this._textWidths)) {
+            console.log(`${columnName} width is ${this._textWidths[columnName]}, because of ${this._textWidthReasons[columnName]}`);
+        }
     }
 
     createRows() {
@@ -150,7 +152,8 @@ export class TheGridComponent {
             let def = {
                 headerName: role,
                 field: role,
-                cellRenderer: 'peopleRenderer'
+                cellRenderer: 'peopleRenderer',
+                width: this._textWidths[role]
             };
             if (existing) {
                 def['width'] = existing;
@@ -162,7 +165,7 @@ export class TheGridComponent {
 
     agClickHandler(event: CellClickedEvent) {
         let srcElement = event.event.srcElement;
-        if(srcElement.tagName == 'SPAN') {
+        if (srcElement.tagName == 'SPAN') {
             let index = srcElement.getAttribute('data-index');
 
             let row = event.data;
@@ -194,11 +197,12 @@ export class TheGridComponent {
         return this._textSizingDiv.offsetWidth + (2 * padding);
     }
 
-    private maxOfExistingAndText(existingWidth: number, object: any) {
+    private maxOfExistingAndText(columnName: string, existingWidth: number, object: any) {
         let text = object.toString();
         let textLen = this.widthForText(text);
         if (textLen > existingWidth) {
             // console.warn(`Choosing ${textLen} for '${text}'`);
+            this._textWidthReasons[columnName] = text;
             return textLen;
         }
         return existingWidth;
