@@ -1,12 +1,11 @@
-import {ChangeDetectionStrategy, Component, NgZone, ViewChild} from '@angular/core';
+import {ChangeDetectionStrategy, Component, Input, NgZone, ViewChild} from '@angular/core';
 import {Platform} from "ionic-angular";
 import {AgGridStickyDirective} from "../../directives/ag-grid-sticky/ag-grid-sticky";
 import {AgGridNg2} from "ag-grid-angular";
 import {CellClickedEvent, GridOptions} from "ag-grid-community";
-import * as faker from 'faker';
 import * as moment from "moment";
-import {Moment} from "moment";
 import {PeopleRenderer} from "./people-renderer";
+import {Data} from "../data";
 
 const defaultAgRowHeight = 28;
 
@@ -16,13 +15,22 @@ const defaultAgRowHeight = 28;
     changeDetection: ChangeDetectionStrategy.OnPush
 })
 export class TheGridComponent {
-    rows: any;
     gridOptions: GridOptions;
-    columnDefinitions: any;
+
+    @Input('data')
+    set data(data: Data) {
+        this._data = data;
+        this.computeGridOptions();
+    }
+
+    get data(): Data {
+        return this._data;
+    }
 
     private _textSizingDiv: HTMLElement;
     private _textWidths: Map<string, number>;
     private _textWidthReasons: Map<string, string>;
+    private _data: Data;
 
     constructor(public zone: NgZone, public platform: Platform) {
     }
@@ -32,33 +40,12 @@ export class TheGridComponent {
 
     private refreshDelay: number = 10;
 
-    get allRolesInLayoutAndDisplayOrder() {
-        return [
-            "Leader",
-            "Bass",
-            "Drums",
-            "Guitar (Accoustic)",
-            "Guitar (Elec1)",
-            "Guitar (Elec2)",
-            "Keys 1",
-            "Keys 2",
-            "Vocal (Main)",
-            "Vocal (Back1)",
-            "Vocal (Back2)",
-            "Sound",
-            "Lighting",
-        ]
-    }
-
-
     ngOnInit() {
-        this.rows = this.createRows();
-        this.determineTextWidths();
-        this.columnDefinitions = this.agColumnDefs();
+        /*
+        For some reason, ag-Grid doesn't pick up on a refresh of GridOptions.
+        Fortunately, some (of the important ones!) can be set here, without having data
+         */
         this.gridOptions = {
-            // onGridReady: this.agResizeColumnsWhenGridReady.bind(this),
-            columnDefs: this.columnDefinitions,
-            rowData: this.rows,
             onCellClicked: this.agClickHandler,
             getRowHeight: (params) => {
                 let countForThisRow = params.data['_count'] || 1;
@@ -67,7 +54,7 @@ export class TheGridComponent {
             frameworkComponents: {
                 peopleRenderer: PeopleRenderer
             }
-        }
+        };
     }
 
     ngAfterViewInit() {
@@ -80,10 +67,14 @@ export class TheGridComponent {
     determineTextWidths() {
         this._textWidths = new Map<string, number>();
         this._textWidthReasons = new Map<string, string>();
-        let columnNames = Object.getOwnPropertyNames(this.rows[0]);
+        if (this.data === undefined || this.data.rows === undefined) {
+            console.warn(`No data rows - not determining column widths`);
+            return;
+        }
+        let columnNames = Object.getOwnPropertyNames(this.data.rows[0]);
         for (let columnName of columnNames) {
             let maxWidth = 0;
-            for (let row of this.rows) {
+            for (let row of this.data.rows) {
                 let value = row[columnName];
                 if (Array.isArray(value)) {
                     for (let val of value) {
@@ -102,40 +93,11 @@ export class TheGridComponent {
         }
     }
 
-    createRows() {
-        let newRows = [];
-        let date = new Date(2016, 0, 1);
-        for (let i = 0; i < 100; i++) {
-            let newRow = {'date': date};
-            let maxPeopleInCol = 0;
-            for (let role of this.allRolesInLayoutAndDisplayOrder) {
-                let names = [];
-                if (Math.random() > 0.2) {
-                    names.push(faker.name.findName());
-                }
-                if (Math.random() > 0.85) {
-                    names.push(faker.name.findName());
-                }
-                newRow[role] = names;
-                maxPeopleInCol = Math.max(maxPeopleInCol, names.length);
-            }
-            newRow['_count'] = maxPeopleInCol;
-            date.setDate(date.getDate() + 7);
-            newRows.push(newRow);
-        }
-        return newRows;
-    }
-
-    agRowData() {
-        return this.rows;
-    }
-
     formatAsPlanDate(date) {
         return moment(date).format("MMM D, YYYY");
     }
 
     agColumnDefs() {
-        let roles = this.allRolesInLayoutAndDisplayOrder;
         let columns: any[] = [
             {
                 headerName: 'Date',
@@ -144,16 +106,20 @@ export class TheGridComponent {
                 valueFormatter: (params) => {
                     return this.formatAsPlanDate(params.value)
                 },
-                width: this._textWidths['date']
-            }
-        ];
+                width: this._textWidths['date'] || 200
+            }];
+        if (this.data === undefined || this.data.rows === undefined) {
+            return columns;
+        }
+
+        let roles = this.data.roles;
         for (let role of roles) {
             let existing = this._textWidths.get(role) || 0;
             let def = {
                 headerName: role,
                 field: role,
                 cellRenderer: 'peopleRenderer',
-                width: this._textWidths[role]
+                width: this._textWidths[role] || 200
             };
             if (existing) {
                 def['width'] = existing;
@@ -206,5 +172,24 @@ export class TheGridComponent {
             return textLen;
         }
         return existingWidth;
+    }
+
+    private computeGridOptions() {
+        console.log(`New data set - computing new grid paramters`);
+        this.determineTextWidths();
+        let columnDefinitions = this.agColumnDefs() || [];
+        let rowData = this.data ? this.data.rows : [];
+
+
+        if (this.agGrid !== undefined && this.agGrid.api !== undefined) {
+            this.agGrid.api.setRowData(rowData);
+            this.agGrid.api.setColumnDefs(columnDefinitions);
+            this.agGrid.api.flashCells();
+            // Not needed, I don't think?
+            // this.agGrid.api.redrawRows();
+            console.info(`GridOptions recomputed. ${rowData.length} rows, ${columnDefinitions.length} columns. Refreshing grid...`);
+        } else {
+            console.warn(`No grid defined on page! Cannot refresh`);
+        }
     }
 }
