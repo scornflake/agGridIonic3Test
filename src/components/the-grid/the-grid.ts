@@ -1,9 +1,14 @@
-import {ChangeDetectionStrategy, Component, NgZone} from '@angular/core';
+import {ChangeDetectionStrategy, Component, NgZone, ViewChild} from '@angular/core';
+import {Platform} from "ionic-angular";
+import {AgGridStickyDirective} from "../../directives/ag-grid-sticky/ag-grid-sticky";
+import {AgGridNg2} from "ag-grid-angular";
+import {CellClickedEvent, GridOptions} from "ag-grid-community";
 import * as faker from 'faker';
-import {Observable, Subject} from "rxjs";
-import {Platform, ScrollEvent} from "ionic-angular";
-import {debounce} from "rxjs/operators";
-import {timer} from "rxjs/observable/timer";
+import * as moment from "moment";
+import {Moment} from "moment";
+import {PeopleRenderer} from "./people-renderer";
+
+const defaultAgRowHeight = 28;
 
 @Component({
     selector: 'the-grid',
@@ -11,14 +16,20 @@ import {timer} from "rxjs/observable/timer";
     changeDetection: ChangeDetectionStrategy.OnPush
 })
 export class TheGridComponent {
-
     rows: any;
+    gridOptions: GridOptions;
+    columnDefinitions: any;
+
+    private _textSizingDiv: HTMLElement;
+    private _textWidths: Map<string, number>;
 
     constructor(public zone: NgZone, public platform: Platform) {
     }
 
-    agHeader: HTMLElement;
-    scrollSubject = new Subject<ScrollEvent>();
+    @ViewChild(AgGridNg2) agGrid: AgGridNg2;
+    @ViewChild(AgGridStickyDirective) stickyDirective;
+
+    private refreshDelay: number = 10;
 
     get allRolesInLayoutAndDisplayOrder() {
         return [
@@ -38,45 +49,55 @@ export class TheGridComponent {
         ]
     }
 
+
     ngOnInit() {
         this.rows = this.createRows();
-    }
-
-    async isDevice(): Promise<boolean> {
-        return this.platform.ready().then(() => {
-            let isADevice = this.platform.is('cordova');
-            console.warn(`isDevice() - on device?:${isADevice}`);
-            return isADevice;
-        });
-    }
-
-    ngAfterViewInit() {
-        this.agHeader = document.querySelector('.ag-header');
-        console.log(`Our header is: ${this.agHeader}`);
-
-        // It's janky under iOS. This helps, but scrolling back up looks pretty awful (you see the header mid-table)
-        this.isDevice().then(isDevice => {
-            console.warn(`Setup scroll subject listener. On device? ${isDevice}`);
-            let theSubject = this.scrollSubject as Observable<ScrollEvent>;
-            if (isDevice) {
-                // try to de-jank
-                theSubject = this.scrollSubject.pipe(debounce(() => timer(10)));
+        this.determineTextWidths();
+        this.columnDefinitions = this.agColumnDefs();
+        this.gridOptions = {
+            // onGridReady: this.agResizeColumnsWhenGridReady.bind(this),
+            columnDefs: this.columnDefinitions,
+            rowData: this.rows,
+            onCellClicked: this.agClickHandler,
+            getRowHeight: (params) => {
+                let countForThisRow = params.data['_count'] || 1;
+                return defaultAgRowHeight * countForThisRow;
+            },
+            frameworkComponents: {
+                peopleRenderer: PeopleRenderer
             }
-            theSubject.subscribe((event) => {
-                this.adjustHeader(event.scrollTop);
-            });
-        })
-    }
-
-    adjustHeader(position: number) {
-        if (this.agHeader) {
-            this.agHeader.style.top = `${position - 1}px`;
-            this.agHeader.style.position = 'absolute';
         }
     }
 
+    ngAfterViewInit() {
+    }
+
     windowScrolled(event) {
-        this.scrollSubject.next(event);
+        this.stickyDirective.windowScrolled(event);
+    }
+
+    determineTextWidths() {
+        this._textWidths = new Map<string, number>();
+        let columnNames = Object.getOwnPropertyNames(this.rows[0]);
+        for (let columnName of columnNames) {
+            let maxWidth = 0;
+            for (let row of this.rows) {
+                let value = row[columnName];
+                if (Array.isArray(value)) {
+                    for (let val of value) {
+                        maxWidth = this.maxOfExistingAndText(maxWidth, val);
+                    }
+                } else if (columnName == 'date') {
+                    maxWidth = this.maxOfExistingAndText(maxWidth, this.formatAsPlanDate(new Date()));
+                } else {
+                    maxWidth = this.maxOfExistingAndText(maxWidth, value);
+                }
+            }
+            this._textWidths[columnName] = maxWidth;
+        }
+        // for (let columnName of Object.getOwnPropertyNames(this._textWidths)) {
+        //     console.log(`${columnName} width is ${this._textWidths[columnName]}`);
+        // }
     }
 
     createRows() {
@@ -84,11 +105,19 @@ export class TheGridComponent {
         let date = new Date(2016, 0, 1);
         for (let i = 0; i < 100; i++) {
             let newRow = {'date': date};
+            let maxPeopleInCol = 0;
             for (let role of this.allRolesInLayoutAndDisplayOrder) {
+                let names = [];
                 if (Math.random() > 0.2) {
-                    newRow[role] = faker.name.findName();
+                    names.push(faker.name.findName());
                 }
+                if (Math.random() > 0.85) {
+                    names.push(faker.name.findName());
+                }
+                newRow[role] = names;
+                maxPeopleInCol = Math.max(maxPeopleInCol, names.length);
             }
+            newRow['_count'] = maxPeopleInCol;
             date.setDate(date.getDate() + 7);
             newRows.push(newRow);
         }
@@ -99,19 +128,79 @@ export class TheGridComponent {
         return this.rows;
     }
 
+    formatAsPlanDate(date) {
+        return moment(date).format("MMM D, YYYY");
+    }
+
     agColumnDefs() {
         let roles = this.allRolesInLayoutAndDisplayOrder;
         let columns: any[] = [
-            {headerName: 'Date', field: 'date', 'pinned': 'left'}
+            {
+                headerName: 'Date',
+                field: 'date',
+                pinned: 'left',
+                valueFormatter: (params) => {
+                    return this.formatAsPlanDate(params.value)
+                },
+                width: this._textWidths['date']
+            }
         ];
         for (let role of roles) {
+            let existing = this._textWidths.get(role) || 0;
             let def = {
                 headerName: role,
                 field: role,
+                cellRenderer: 'peopleRenderer'
             };
+            if (existing) {
+                def['width'] = existing;
+            }
             columns.push(def);
         }
         return columns;
     }
 
+    agClickHandler(event: CellClickedEvent) {
+        let srcElement = event.event.srcElement;
+        if(srcElement.tagName == 'SPAN') {
+            let index = srcElement.getAttribute('data-index');
+
+            let row = event.data;
+            let columnData = row[event.colDef.field];
+            console.log(`Clicked span ${srcElement} / ${index}: ${columnData[index]}`);
+        } else {
+            console.log(`Clicked ${srcElement}, ${srcElement.tagName}`);
+        }
+    }
+
+    agResizeColumnsWhenGridReady() {
+        if (!this.agGrid || !this.agGrid.api) {
+            console.log("grid not ready...");
+            this.refreshDelay += Math.min(this.refreshDelay + 100, 1500);
+            setTimeout(() => {
+                this.agResizeColumnsWhenGridReady();
+            }, this.refreshDelay);
+            return;
+        }
+        console.warn(`resizing columns to fit`);
+        this.agGrid.api.sizeColumnsToFit();
+    }
+
+    private widthForText(text: string, padding: number = 10) {
+        if (!this._textSizingDiv) {
+            this._textSizingDiv = document.getElementById('Test');
+        }
+        this._textSizingDiv.innerText = text;
+        return this._textSizingDiv.offsetWidth + (2 * padding);
+    }
+
+    private maxOfExistingAndText(existingWidth: number, object: any) {
+        let text = object.toString();
+        let textLen = this.widthForText(text);
+        if (textLen > existingWidth) {
+            // console.warn(`Choosing ${textLen} for '${text}'`);
+            return textLen;
+        }
+        return existingWidth;
+    }
 }

@@ -1,3 +1,16 @@
 the-grid {
+  .person {
+    display: block;
+    clear: right;
+  }
+
+  #Test {
+    position: absolute;
+    visibility: hidden;
+    display: inline-block;
+    height: auto;
+    width: auto;
+    white-space: nowrap; /* Thanks to Herb Caudill comment */
+  }
 
 }

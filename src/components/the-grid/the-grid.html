@@ -1,8 +1,9 @@
 <div>
+    <p class="ag-theme-balham" id="Test"></p>
     <ag-grid-angular
             class="ag-theme-balham"
-            [rowData]="agRowData()"
-            [columnDefs]="agColumnDefs()"
+            [gridOptions]="gridOptions"
+            ag-grid-sticky
     >
     </ag-grid-angular>
 </div>

@@ -11,7 +11,7 @@ import {ComponentsModule} from "../components/components.module";
 @NgModule({
     declarations: [
         MyApp,
-        HomePage
+        HomePage,
     ],
     imports: [
         BrowserModule,
