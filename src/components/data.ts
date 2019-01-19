@@ -6,7 +6,7 @@ export class Data {
     rows: Array<any>;
     roles: Array<string>;
 
-    constructor() {
+    constructor(private numberOfRowsInData: number = 50) {
         this.createRoles();
         this.createRows();
     }
@@ -14,17 +14,11 @@ export class Data {
     createRows() {
         let newRows = [];
         let date = new Date(2016, 0, 1);
-        for (let i = 0; i < 100; i++) {
+        for (let i = 0; i < this.numberOfRowsInData; i++) {
             let newRow = {'date': date};
             let maxPeopleInCol = 0;
             for (let role of this.roles) {
-                let names = [];
-                if (Math.random() > 0.2) {
-                    names.push(faker.name.findName());
-                }
-                if (Math.random() > 0.85) {
-                    names.push(faker.name.findName());
-                }
+                let names = this.generateNamesForCell();
                 newRow[role] = names;
                 maxPeopleInCol = Math.max(maxPeopleInCol, names.length);
             }
@@ -35,6 +29,16 @@ export class Data {
         this.rows = newRows;
     }
 
+    private generateNamesForCell(): string[] {
+        let names = [];
+        if (Math.random() > 0.2) {
+            names.push(faker.name.findName());
+        }
+        if (Math.random() > 0.85) {
+            names.push(faker.name.findName());
+        }
+        return names;
+    }
 
     private createRoles() {
         this.roles = [
@@ -52,5 +56,28 @@ export class Data {
             "Sound",
             "Lighting",
         ];
+    }
+
+    createNewWithSmallChange() {
+        let newData = new Data();
+        newData.rows = this.rows;
+        newData.makeSmallChange();
+        return newData;
+    }
+
+    makeSmallChange(numberOfChanges: number = 5) {
+        for (let i = 0; i < numberOfChanges; i++) {
+            let index = Math.floor(Math.random() * this.rows.length);
+            let row = this.rows[index];
+            if (row) {
+                let columnNames = Object.getOwnPropertyNames(row);
+                let colIndex = Math.floor(columnNames.length * Math.random());
+                let columnName = columnNames[colIndex];
+                if (columnName) {
+                    row[columnName] = this.generateNamesForCell();
+                    console.log(`Changed for ${index}, column ${columnName} to ${row[columnName]}`);
+                }
+            }
+        }
     }
 }

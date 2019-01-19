@@ -24,11 +24,15 @@ export class HomePage implements AfterViewInit {
 
     ngAfterViewInit(): void {
         setTimeout(() => {
-            this.data = new Data();
-        }, 1500);
+            this.data = new Data(25);
+        }, 1000);
     }
 
     gridData() {
         return this.data;
+    }
+
+    makeSmallDataChange() {
+        this.data = this.data.createNewWithSmallChange();
     }
 }

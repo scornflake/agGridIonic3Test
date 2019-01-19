@@ -6,6 +6,7 @@ import {CellClickedEvent, GridOptions} from "ag-grid-community";
 import * as moment from "moment";
 import {PeopleRenderer} from "./people-renderer";
 import {Data} from "../data";
+import * as _ from 'lodash';
 
 const defaultAgRowHeight = 28;
 
@@ -51,6 +52,7 @@ export class TheGridComponent {
                 let countForThisRow = params.data['_count'] || 1;
                 return defaultAgRowHeight * countForThisRow;
             },
+            enableCellChangeFlash: true,
             frameworkComponents: {
                 peopleRenderer: PeopleRenderer
             }
@@ -119,7 +121,16 @@ export class TheGridComponent {
                 headerName: role,
                 field: role,
                 cellRenderer: 'peopleRenderer',
-                width: this._textWidths[role] || 200
+                width: this._textWidths[role] || 200,
+                equals: (namesOne, namesTwo) => {
+                    let changed = _.isEqual(namesOne, namesTwo);
+                    if(!changed) {
+                        console.warn(`${namesOne} didn't differ`);
+                    } else {
+                        console.warn(`${namesOne}/${namesTwo} were different`);
+                    }
+                    return changed;
+                }
             };
             if (existing) {
                 def['width'] = existing;
@@ -175,16 +186,15 @@ export class TheGridComponent {
     }
 
     private computeGridOptions() {
-        console.log(`New data set - computing new grid paramters`);
+        console.log(`New data set - computing new grid parameters`);
         this.determineTextWidths();
         let columnDefinitions = this.agColumnDefs() || [];
         let rowData = this.data ? this.data.rows : [];
 
-
         if (this.agGrid !== undefined && this.agGrid.api !== undefined) {
             this.agGrid.api.setRowData(rowData);
             this.agGrid.api.setColumnDefs(columnDefinitions);
-            this.agGrid.api.flashCells();
+            // this.agGrid.api.flashCells();
             // Not needed, I don't think?
             // this.agGrid.api.redrawRows();
             console.info(`GridOptions recomputed. ${rowData.length} rows, ${columnDefinitions.length} columns. Refreshing grid...`);
